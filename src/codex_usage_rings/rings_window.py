@@ -10,8 +10,8 @@ from .host_window import get_codex_window_state
 from .account_usage import CodexUsageError, fetch_usage_with_auth_refresh, parse_usage_payload
 from .models import UsageCardModel, build_card_models
 
-# Keep two more Ctrl+- steps available for a compact desktop footprint.
-MIN_SCALE = 0.45
+# Keep two extra Ctrl+- steps available for a compact desktop footprint.
+MIN_SCALE = 0.25
 MAX_SCALE = 1.8
 SCALE_STEP = 0.1
 DEFAULT_SCALE = round(MIN_SCALE + SCALE_STEP, 2)
@@ -195,8 +195,8 @@ class UsageRingsWindow(QtWidgets.QWidget):
         self._layout.setContentsMargins(margin_h, margin_v, margin_h, margin_v)
         self._layout.setSpacing(int(round(12 * self._scale)))
         self._rings.apply_scale(self._scale)
-        width = int(round(408 * self._scale))
-        height = int(round(470 * self._scale))
+        width = max(int(round(408 * self._scale)), 120 if self._scale < 0.35 else 0)
+        height = max(int(round(470 * self._scale)), 142 if self._scale < 0.35 else 0)
         self.setMinimumSize(width, height)
         self.resize(width, height)
 
@@ -315,41 +315,20 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         painter.setBrush(background)
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 22 * self._scale, 22 * self._scale)
 
-        header_margin = max(16, int(round(24 * self._scale)))
-        header_top = max(6, int(round(12 * self._scale)))
-        header_height = max(22, int(round(24 * self._scale)))
-        title_font = QtGui.QFont("Segoe UI", max(10, int(round(14 * self._scale))))
-        title_font.setWeight(QtGui.QFont.Weight.DemiBold)
-        painter.setFont(title_font)
-        painter.setPen(QtGui.QColor("#f5f7fb"))
-        painter.drawText(
-            QtCore.QRectF(header_margin, header_top, self.width() - 2 * header_margin, header_height),
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
-            "Codex usage",
-        )
-        status = "LIVE" if self._models is not None else ("ERROR" if self._error else "SYNCING")
-        status_color = "#46d58b" if status == "LIVE" else ("#ff6b76" if status == "ERROR" else "#b9c4d3")
-        status_font = QtGui.QFont("Segoe UI", max(9, int(round(9 * self._scale))))
-        status_font.setWeight(QtGui.QFont.Weight.DemiBold)
-        painter.setFont(status_font)
-        painter.setPen(QtGui.QColor(status_color))
-        painter.drawText(
-            QtCore.QRectF(header_margin, header_top, self.width() - 2 * header_margin, header_height),
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter,
-            f"●  {status}",
-        )
-
         compact_footer = self._scale < 0.7
-        row_pitch = max(24, int(round(28 * self._scale))) if compact_footer else max(34, int(round(40 * self._scale)))
-        footer_height = row_pitch * 2 + 12
+        tiny_footer = self._scale < 0.35
+        row_pitch = (
+            max(20, int(round(26 * self._scale)))
+            if tiny_footer
+            else max(24, int(round(28 * self._scale)))
+            if compact_footer
+            else max(34, int(round(40 * self._scale)))
+        )
+        footer_height = row_pitch * 2 + (8 if tiny_footer else 12)
         footer_height = max(footer_height, int(round(96 * self._scale)))
         footer_top = self.height() - footer_height
-        ring_top = max(
-            20,
-            int(round(44 * self._scale)),
-            header_top + header_height + max(6, int(round(8 * self._scale))),
-        )
-        footer_gap = max(6, int(round(8 * self._scale)))
+        ring_top = max(8, int(round(16 * self._scale)))
+        footer_gap = max(5, int(round(8 * self._scale)))
         diameter = min(
             self.width() - int(round(52 * self._scale)),
             footer_top - ring_top - footer_gap,
@@ -401,26 +380,9 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         painter.setFont(percent_font)
         painter.setPen(QtGui.QColor("#ffffff"))
         painter.drawText(
-            inner_rect.adjusted(0, -7 * self._scale, 0, 15 * self._scale),
+            inner_rect.adjusted(0, -1 * self._scale, 0, 1 * self._scale),
             QtCore.Qt.AlignmentFlag.AlignCenter,
             f"{inner_remaining}%" if inner_model is not None else "—",
-        )
-        center_label_font = QtGui.QFont("Segoe UI", max(8, int(round(11 * self._scale))))
-        center_label_font.setWeight(QtGui.QFont.Weight.DemiBold)
-        painter.setFont(center_label_font)
-        painter.setPen(QtGui.QColor("#d1d9e5"))
-        painter.drawText(
-            inner_rect.adjusted(0, -47 * self._scale, 0, -20 * self._scale),
-            QtCore.Qt.AlignmentFlag.AlignCenter,
-            "Weekly",
-        )
-        remaining_font = QtGui.QFont("Segoe UI", max(8, int(round(9 * self._scale))))
-        painter.setFont(remaining_font)
-        painter.setPen(QtGui.QColor("#b7c2d1"))
-        painter.drawText(
-            inner_rect.adjusted(0, 29 * self._scale, 0, 48 * self._scale),
-            QtCore.Qt.AlignmentFlag.AlignCenter,
-            "remaining",
         )
 
         painter.setPen(QtGui.QPen(QtGui.QColor("#344050"), max(1, int(round(self._scale)))))
@@ -465,6 +427,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         *,
         compact: bool,
     ) -> None:
+        tiny = compact and self._scale < 0.35
         color = _ring_color(remaining) if model is not None else QtGui.QColor("#687384")
         left_margin = (
             max(10, int(round(18 * self._scale)))
@@ -489,9 +452,14 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         label_font.setWeight(QtGui.QFont.Weight.DemiBold)
         painter.setFont(label_font)
         painter.setPen(QtGui.QColor("#f1f4f8"))
-        percent_text = f"{remaining}% remaining" if model is not None else "Waiting for data"
+        if model is None:
+            percent_text = "—"
+        elif tiny:
+            percent_text = f"{remaining}%"
+        else:
+            percent_text = f"{remaining}% remaining"
         available_width = max(40, self.width() - text_left - right_margin)
-        label_height = max(22 if compact else 18, int(round(22 * self._scale)))
+        label_height = max(18 if tiny else 22 if compact else 18, int(round(22 * self._scale)))
 
         if compact:
             # Give the value its own right-aligned column. A single combined
@@ -521,7 +489,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
             f"{label}  ·  {percent_text}",
         )
 
-        # At the two smallest settings, the reset lines cannot remain legible
+        # At compact settings, the reset lines cannot remain legible
         # beside the rings. Keep them available in the tooltip instead.
 
         reset_font = QtGui.QFont("Segoe UI", max(8, int(round(9 * self._scale))))

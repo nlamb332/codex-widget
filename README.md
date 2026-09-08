@@ -68,6 +68,8 @@ Optional arguments:
   `Ctrl++` to make it larger.
 - The app starts at the second-smallest size; press `Ctrl+-` once for the
   smallest setting.
+- The two smallest settings use a compact footer and show only the weekly
+  percentage inside the ring to keep every element separated.
 - Press `Ctrl+T` to toggle the translucent glass background. The choice is
   saved for the next launch.
 - The live rings icon stays in the Windows notification area instead of adding
