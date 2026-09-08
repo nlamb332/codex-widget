@@ -20,6 +20,7 @@ class UsageRingsWindow(QtWidgets.QWidget):
     """A compact, always-on-top pair of usage rings that follows Codex."""
 
     usage_changed = QtCore.pyqtSignal(object)
+    glass_mode_changed = QtCore.pyqtSignal(bool)
 
     def __init__(
         self,
@@ -39,6 +40,7 @@ class UsageRingsWindow(QtWidgets.QWidget):
         self._codex_state = None
         self._position_initialized = False
         self._settings = QtCore.QSettings("Codex", "UsageRings")
+        self._glass_mode = bool(self._settings.value("window/glass", False, type=bool))
 
         self._rings = UsageRingsCanvas(parent=self)
         self._layout = QtWidgets.QHBoxLayout(self)
@@ -55,10 +57,9 @@ class UsageRingsWindow(QtWidgets.QWidget):
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setStyleSheet(
-            "QWidget#usageWidget { background: #171a20; border: 1px solid #2c3440; border-radius: 24px; }"
-        )
         self.setObjectName("usageWidget")
+        self._apply_background_style()
+        self._rings.set_glass_mode(self._glass_mode)
 
         self._increase_shortcuts = (
             QtGui.QShortcut(QtGui.QKeySequence("Ctrl++"), self),
@@ -70,6 +71,9 @@ class UsageRingsWindow(QtWidgets.QWidget):
         self._decrease_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+-"), self)
         self._decrease_shortcut.setContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
         self._decrease_shortcut.activated.connect(self._decrease_scale)
+        self._glass_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self)
+        self._glass_shortcut.setContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
+        self._glass_shortcut.activated.connect(self._toggle_glass_mode)
 
         self._usage_timer = QtCore.QTimer(self)
         self._usage_timer.setInterval(max(15, refresh_seconds) * 1000)
@@ -150,6 +154,32 @@ class UsageRingsWindow(QtWidgets.QWidget):
 
     def _decrease_scale(self) -> None:
         self._change_scale(-SCALE_STEP)
+
+    def _toggle_glass_mode(self) -> None:
+        self.set_glass_mode(not self._glass_mode)
+
+    def set_glass_mode(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._glass_mode:
+            return
+        self._glass_mode = enabled
+        self._settings.setValue("window/glass", enabled)
+        self._settings.sync()
+        self._rings.set_glass_mode(enabled)
+        self._apply_background_style()
+        self.glass_mode_changed.emit(enabled)
+
+    @property
+    def glass_mode(self) -> bool:
+        return self._glass_mode
+
+    def _apply_background_style(self) -> None:
+        if self._glass_mode:
+            self.setStyleSheet("QWidget#usageWidget { background: transparent; border: none; }")
+        else:
+            self.setStyleSheet(
+                "QWidget#usageWidget { background: #171a20; border: 1px solid #2c3440; border-radius: 24px; }"
+            )
 
     def _change_scale(self, delta: float) -> None:
         next_scale = max(MIN_SCALE, min(MAX_SCALE, round(self._scale + delta, 2)))
@@ -234,6 +264,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         self._scale = 1.0
         self._models: tuple[UsageCardModel, UsageCardModel] | None = None
         self._error: str | None = None
+        self._glass_mode = False
         self.setMinimumSize(372, 412)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         self.setAccessibleName("Codex usage")
@@ -242,6 +273,10 @@ class UsageRingsCanvas(QtWidgets.QWidget):
     def apply_scale(self, scale: float) -> None:
         self._scale = scale
         self.setMinimumSize(int(round(324 * scale)), int(round(354 * scale)))
+        self.update()
+
+    def set_glass_mode(self, enabled: bool) -> None:
+        self._glass_mode = bool(enabled)
         self.update()
 
     def set_models(self, models: tuple[UsageCardModel, UsageCardModel]) -> None:
@@ -265,10 +300,17 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         del event
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        painter.setPen(QtGui.QPen(QtGui.QColor("#3a4656"), max(1, int(round(self._scale)))))
+        border_color = QtGui.QColor("#7890aa") if self._glass_mode else QtGui.QColor("#3a4656")
+        border_color.setAlpha(150 if self._glass_mode else 255)
+        painter.setPen(QtGui.QPen(border_color, max(1, int(round(self._scale)))))
         background = QtGui.QLinearGradient(0, 0, 0, self.height())
-        background.setColorAt(0, QtGui.QColor("#222a35"))
-        background.setColorAt(1, QtGui.QColor("#171c24"))
+        if self._glass_mode:
+            background.setColorAt(0, QtGui.QColor(52, 67, 86, 178))
+            background.setColorAt(0.48, QtGui.QColor(30, 42, 57, 148))
+            background.setColorAt(1, QtGui.QColor(13, 20, 29, 184))
+        else:
+            background.setColorAt(0, QtGui.QColor("#222a35"))
+            background.setColorAt(1, QtGui.QColor("#171c24"))
         painter.setBrush(background)
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 22 * self._scale, 22 * self._scale)
 

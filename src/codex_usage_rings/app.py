@@ -24,6 +24,8 @@ class UsageRingsTray(QtWidgets.QSystemTrayIcon):
         self.setContextMenu(self._build_menu())
         self.activated.connect(self._handle_activation)
         window.usage_changed.connect(self._update_icon)
+        window.glass_mode_changed.connect(self._sync_glass_action)
+        self._sync_glass_action(window.glass_mode)
         self._update_icon(None)
 
     def _build_menu(self) -> QtWidgets.QMenu:
@@ -32,7 +34,15 @@ class UsageRingsTray(QtWidgets.QSystemTrayIcon):
         show_action.triggered.connect(self._show_window)
         hide_action = menu.addAction("Hide usage rings")
         hide_action.triggered.connect(self._window.hide)
+        menu.addSeparator()
+        self._glass_action = menu.addAction("Glass background")
+        self._glass_action.setCheckable(True)
+        self._glass_action.triggered.connect(self._window.set_glass_mode)
         return menu
+
+    @QtCore.pyqtSlot(bool)
+    def _sync_glass_action(self, enabled: bool) -> None:
+        self._glass_action.setChecked(enabled)
 
     def _show_window(self) -> None:
         self._window.showNormal()
