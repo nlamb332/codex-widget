@@ -66,10 +66,11 @@ Optional arguments:
   restored when it reappears.
 - Click the window once, then use `Ctrl+-` to make it smaller or `Ctrl+=` /
   `Ctrl++` to make it larger.
-- The app starts at the second-smallest size; press `Ctrl+-` once for the
-  smallest setting.
-- The two smallest settings use a compact footer and show only the weekly
-  percentage inside the ring to keep every element separated.
+- The app starts at the third-smallest size; press `Ctrl+-` once for the
+  second-smallest setting and twice for the smallest.
+- The two smallest settings hide the header and the `Weekly` / `remaining`
+  ring labels. Their footer shows compact percentage-only values so every
+  element stays separated.
 - Press `Ctrl+T` to toggle the translucent glass background. The choice is
   saved for the next launch.
 - The live rings icon stays in the Windows notification area instead of adding
