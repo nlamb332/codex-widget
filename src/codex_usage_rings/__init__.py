@@ -1,0 +1,1 @@
+"""Standalone Windows app for Codex usage rings."""
