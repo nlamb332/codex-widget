@@ -22,11 +22,21 @@ def main() -> int:
 
     try:
         while True:
-            child = subprocess.Popen(
-                [sys.executable, str(WIDGET_SCRIPT)],
-                cwd=str(PROJECT_ROOT),
-                close_fds=True,
-            )
+            try:
+                creationflags = 0
+                if sys.platform == "win32":
+                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                child = subprocess.Popen(
+                    [sys.executable, str(WIDGET_SCRIPT)],
+                    cwd=str(PROJECT_ROOT),
+                    close_fds=True,
+                    creationflags=creationflags,
+                )
+            except OSError:
+                # Keep supervising if a transient process or filesystem error
+                # prevents one child from starting.
+                time.sleep(5)
+                continue
             child.wait()
             # A normal close or a transient startup failure should not leave
             # the widget unavailable, but avoid a tight respawn loop.

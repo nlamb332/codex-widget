@@ -25,7 +25,10 @@ class CodexWindowState:
     def should_show_widget(self) -> bool:
         if not self.supported:
             return True
-        return self.running and not self.minimized
+        # A background codex.exe helper can outlive the desktop shell. Require
+        # a matching top-level window so closing Codex hides the rings and a
+        # newly opened shell can trigger them to return.
+        return self.running and self.window_found and not self.minimized
 
 
 def get_codex_window_state() -> CodexWindowState:
@@ -44,8 +47,6 @@ def get_codex_window_state() -> CodexWindowState:
         return CodexWindowState(supported=True, running=False, window_found=False, minimized=False)
 
     windows = _codex_windows(process_ids)
-    # Some Codex builds keep their UI in a child process. If no top-level window
-    # is discoverable, process presence is still enough to keep the widget open.
     minimized = bool(windows) and all(_USER32.IsIconic(hwnd) for hwnd in windows)
     return CodexWindowState(
         supported=True,

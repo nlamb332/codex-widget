@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     app = QtWidgets.QApplication(sys.argv[:1])
+    # Hiding the rings while Codex is closed must not terminate the listener.
+    app.setQuitOnLastWindowClosed(False)
     widget = UsageRingsWindow(
         auth_file=args.auth_file,
         base_url=args.base_url,
