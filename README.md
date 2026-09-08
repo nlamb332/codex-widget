@@ -66,6 +66,8 @@ Optional arguments:
   restored when it reappears.
 - Click the window once, then use `Ctrl+-` to make it smaller or `Ctrl+=` /
   `Ctrl++` to make it larger.
+- The app starts at the second-smallest size; press `Ctrl+-` once for the
+  smallest setting.
 - Press `Ctrl+T` to toggle the translucent glass background. The choice is
   saved for the next launch.
 - The live rings icon stays in the Windows notification area instead of adding

@@ -14,6 +14,7 @@ from .models import UsageCardModel, build_card_models
 MIN_SCALE = 0.45
 MAX_SCALE = 1.8
 SCALE_STEP = 0.1
+DEFAULT_SCALE = round(MIN_SCALE + SCALE_STEP, 2)
 
 
 class UsageRingsWindow(QtWidgets.QWidget):
@@ -36,7 +37,7 @@ class UsageRingsWindow(QtWidgets.QWidget):
         self._drag_position: QtCore.QPoint | None = None
         self._thread: QtCore.QThread | None = None
         self._worker: UsageFetchWorker | None = None
-        self._scale = 1.0
+        self._scale = DEFAULT_SCALE
         self._codex_state = None
         self._position_initialized = False
         self._settings = QtCore.QSettings("Codex", "UsageRings")
