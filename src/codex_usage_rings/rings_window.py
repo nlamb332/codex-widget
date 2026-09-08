@@ -19,6 +19,8 @@ SCALE_STEP = 0.1
 class UsageRingsWindow(QtWidgets.QWidget):
     """A compact, always-on-top pair of usage rings that follows Codex."""
 
+    usage_changed = QtCore.pyqtSignal(object)
+
     def __init__(
         self,
         *,
@@ -48,6 +50,7 @@ class UsageRingsWindow(QtWidgets.QWidget):
         self.setWindowFlags(
             QtCore.Qt.WindowType.FramelessWindowHint
             | QtCore.Qt.WindowType.WindowStaysOnTopHint
+            | QtCore.Qt.WindowType.Tool
         )
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -135,10 +138,12 @@ class UsageRingsWindow(QtWidgets.QWidget):
     @QtCore.pyqtSlot(object)
     def _handle_usage_loaded(self, cards: tuple[UsageCardModel, UsageCardModel]) -> None:
         self._rings.set_models(cards)
+        self.usage_changed.emit(cards)
 
     @QtCore.pyqtSlot(str)
     def _handle_usage_failed(self, message: str) -> None:
         self._rings.set_error(message)
+        self.usage_changed.emit(None)
 
     def _increase_scale(self) -> None:
         self._change_scale(SCALE_STEP)
@@ -418,15 +423,26 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         compact: bool,
     ) -> None:
         color = _ring_color(remaining) if model is not None else QtGui.QColor("#687384")
-        left_margin = max(14, int(round(24 * self._scale)))
+        left_margin = (
+            max(10, int(round(18 * self._scale)))
+            if compact
+            else max(14, int(round(24 * self._scale)))
+        )
         right_margin = left_margin
-        text_left = left_margin + max(14, int(round(16 * self._scale)))
+        text_left = left_margin + (
+            max(12, int(round(14 * self._scale)))
+            if compact
+            else max(14, int(round(16 * self._scale)))
+        )
         dot_size = max(6, int(round(8 * self._scale)))
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(color)
         painter.drawEllipse(QtCore.QRectF(left_margin, top + 8 * self._scale, dot_size, dot_size))
 
-        label_font = QtGui.QFont("Segoe UI", max(9, int(round(10 * self._scale))))
+        label_font = QtGui.QFont(
+            "Segoe UI",
+            max(8, int(round(10 * self._scale))) if compact else max(9, int(round(10 * self._scale))),
+        )
         label_font.setWeight(QtGui.QFont.Weight.DemiBold)
         painter.setFont(label_font)
         painter.setPen(QtGui.QColor("#f1f4f8"))
@@ -441,7 +457,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
             value_font = QtGui.QFont(label_font)
             value_metrics = QtGui.QFontMetrics(value_font)
             value_width = value_metrics.horizontalAdvance(percent_text)
-            gap = max(8, int(round(10 * self._scale)))
+            gap = max(6, int(round(8 * self._scale)))
             label_width = max(32, available_width - value_width - gap)
             label_text = value_metrics.elidedText(label, QtCore.Qt.TextElideMode.ElideRight, label_width)
             painter.drawText(

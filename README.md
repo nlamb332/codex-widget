@@ -66,6 +66,8 @@ Optional arguments:
   restored when it reappears.
 - Click the window once, then use `Ctrl+-` to make it smaller or `Ctrl+=` /
   `Ctrl++` to make it larger.
+- The live rings icon stays in the Windows notification area instead of adding
+  a taskbar button. Click it to show the window or right-click for controls.
 - Hover over the window for full reset details when using the two smallest
   sizes.
 

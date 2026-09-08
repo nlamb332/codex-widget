@@ -6,11 +6,103 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from .account_usage import DEFAULT_AUTH_FILE, DEFAULT_BASE_URL
+from .models import UsageCardModel
 
 from .rings_window import UsageRingsWindow
+
+
+class UsageRingsTray(QtWidgets.QSystemTrayIcon):
+    """Status icon and small control menu for the borderless rings window."""
+
+    def __init__(self, window: UsageRingsWindow, app: QtWidgets.QApplication) -> None:
+        super().__init__(app)
+        self._window = window
+        self.setToolTip("Codex Usage Rings")
+        self.setContextMenu(self._build_menu())
+        self.activated.connect(self._handle_activation)
+        window.usage_changed.connect(self._update_icon)
+        self._update_icon(None)
+
+    def _build_menu(self) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu()
+        show_action = menu.addAction("Show usage rings")
+        show_action.triggered.connect(self._show_window)
+        hide_action = menu.addAction("Hide usage rings")
+        hide_action.triggered.connect(self._window.hide)
+        return menu
+
+    def _show_window(self) -> None:
+        self._window.showNormal()
+        self._window._place_initially()
+        self._window._raise_without_focus()
+
+    def _handle_activation(self, reason: QtWidgets.QSystemTrayIcon.ActivationReason) -> None:
+        if reason in (
+            QtWidgets.QSystemTrayIcon.ActivationReason.Trigger,
+            QtWidgets.QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            self._show_window()
+
+    @QtCore.pyqtSlot(object)
+    def _update_icon(self, models: object) -> None:
+        cards = models if isinstance(models, tuple) and len(models) == 2 else None
+        outer = cards[0] if cards is not None else None
+        inner = cards[1] if cards is not None else None
+        self.setIcon(self._make_icon(outer, inner))
+        if outer is not None and inner is not None:
+            self.setToolTip(
+                f"Codex Usage Rings | 5-hour {outer.percent_remaining}% remaining; "
+                f"Weekly {inner.percent_remaining}% remaining"
+            )
+        else:
+            self.setToolTip("Codex Usage Rings | waiting for usage data")
+
+    @staticmethod
+    def _make_icon(outer: UsageCardModel | None, inner: UsageCardModel | None) -> QtGui.QIcon:
+        size = 64
+        pixmap = QtGui.QPixmap(size, size)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(QtGui.QColor("#1c2430"))
+        painter.drawRoundedRect(QtCore.QRectF(2, 2, 60, 60), 14, 14)
+
+        outer_rect = QtCore.QRectF(9, 9, 46, 46)
+        inner_rect = QtCore.QRectF(19, 19, 26, 26)
+        UsageRingsTray._draw_ring(painter, outer_rect, 6, outer.percent_remaining if outer else None)
+        UsageRingsTray._draw_ring(painter, inner_rect, 5, inner.percent_remaining if inner else None)
+        painter.end()
+        return QtGui.QIcon(pixmap)
+
+    @staticmethod
+    def _draw_ring(
+        painter: QtGui.QPainter,
+        rect: QtCore.QRectF,
+        width: int,
+        remaining: int | None,
+    ) -> None:
+        background = QtGui.QPen(QtGui.QColor("#536174"), width)
+        background.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        painter.setPen(background)
+        painter.drawArc(rect, 90 * 16, -360 * 16)
+        if remaining is None:
+            return
+        accent = QtGui.QPen(_remaining_color(remaining), width)
+        accent.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        painter.setPen(accent)
+        painter.drawArc(rect, 90 * 16, -int(max(0, min(100, remaining)) * 3.6 * 16))
+
+
+def _remaining_color(percent: int) -> QtGui.QColor:
+    if percent >= 50:
+        return QtGui.QColor("#46d58b")
+    if percent >= 20:
+        return QtGui.QColor("#ffbd69")
+    return QtGui.QColor("#ff6b76")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,6 +128,9 @@ def main(argv: list[str] | None = None) -> int:
         base_url=args.base_url,
         refresh_seconds=args.refresh_seconds,
     )
+    tray = UsageRingsTray(widget, app)
+    tray.show()
+    app.aboutToQuit.connect(tray.hide)
     if args.start_visible:
         widget.show()
         widget._raise_without_focus()
