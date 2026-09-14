@@ -12,18 +12,31 @@ running across Codex restarts through a small watchdog process.
 ## Requirements
 
 - Windows 10 or 11
-- Python 3.10 or newer
-- PyQt6
-- A signed-in Codex desktop app with `~/.codex/auth.json`
+- Python 3.10 or newer on `PATH` (or available through the `py` launcher)
+- A signed-in Codex desktop app
 
-## Setup
+## Installation on another Windows system
 
-From PowerShell, create an environment and install the app:
+Clone the public repository, create an isolated Python environment, and
+install the widget:
 
 ```powershell
-py -3.13 -m venv .venv
+git clone https://github.com/your-account/codex-widget.git
+cd codex-widget
+python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe -m pip install -e .
+```
+
+If `python` is not available, replace it with `py -3.11` (or another
+installed Python 3.10+ version). Sign in to the Codex desktop app before
+launching. The widget reads the local Codex credential at
+`%USERPROFILE%\.codex\auth.json`; never copy that file into this repository.
+
+To verify the installation immediately:
+
+```powershell
+.venv\Scripts\python.exe scripts\launch_usage_rings.py --start-visible
 ```
 
 For automatic startup, create a desktop shortcut and a Startup shortcut that
@@ -64,13 +77,17 @@ Optional arguments:
 
 - Drag the rings window with the left mouse button. Its position is saved and
   restored when it reappears.
+- The Codex and Claude widgets snap together when the dragged widget comes
+  within 20 pixels of another widget. Left/right placements align their top
+  or bottom edges; top/bottom placements align their left or right edges.
+  Drag farther away to separate them.
 - Click the window once, then use `Ctrl+-` to make it smaller or `Ctrl+=` /
   `Ctrl++` to make it larger.
 - The app starts at the third-smallest size; press `Ctrl+-` once for the
   second-smallest setting and twice for the smallest.
-- The two smallest settings hide the header and the `Weekly` / `remaining`
-  ring labels. Their footer shows compact percentage-only values so every
-  element stays separated.
+- The title/status banner stays visible at every size. At the two smallest
+  settings the refresh time is omitted and the footer uses compact
+  percentage-only values so every element stays separated.
 - Press `Ctrl+T` to toggle the translucent glass background. The choice is
   saved for the next launch.
 - The live rings icon stays in the Windows notification area instead of adding
@@ -107,6 +124,12 @@ Accept: application/json
 
 The endpoint may change without notice. Credentials stay local and are sent
 only with that usage request.
+
+## Privacy and repository hygiene
+
+The repository contains source code and installation documentation only. Do
+not commit auth files, API keys, tokens, logs, screenshots, or machine-specific
+paths. Local credential and environment files are ignored by `.gitignore`.
 
 ## Project structure
 
