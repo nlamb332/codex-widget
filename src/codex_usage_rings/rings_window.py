@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+from datetime import datetime
 from typing import Optional
 
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -143,7 +144,7 @@ class UsageRingsWindow(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(object)
     def _handle_usage_loaded(self, cards: tuple[UsageCardModel, UsageCardModel]) -> None:
-        self._rings.set_models(cards)
+        self._rings.set_models(cards, last_refreshed=datetime.now().astimezone())
         self.usage_changed.emit(cards)
 
     @QtCore.pyqtSlot(str)
@@ -267,6 +268,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         self._models: tuple[UsageCardModel, UsageCardModel] | None = None
         self._error: str | None = None
         self._glass_mode = False
+        self._last_refreshed: datetime | None = None
         self.setMinimumSize(372, 412)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         self.setAccessibleName("Codex usage")
@@ -281,9 +283,16 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         self._glass_mode = bool(enabled)
         self.update()
 
-    def set_models(self, models: tuple[UsageCardModel, UsageCardModel]) -> None:
+    def set_models(
+        self,
+        models: tuple[UsageCardModel, UsageCardModel],
+        *,
+        last_refreshed: datetime | None = None,
+    ) -> None:
         self._models = models
         self._error = None
+        if last_refreshed is not None:
+            self._last_refreshed = last_refreshed
         self.setToolTip(
             f"5-hour: {models[0].percent_remaining}% remaining\n"
             f"{models[0].reset_text}\n"
@@ -350,6 +359,8 @@ class UsageRingsCanvas(QtWidgets.QWidget):
             status_font = QtGui.QFont("Segoe UI", max(9, int(round(9 * self._scale))))
             status_font.setWeight(QtGui.QFont.Weight.DemiBold)
             status_text = f"●  {status}"
+            if status == "LIVE" and self._last_refreshed is not None:
+                status_text = f"●  {status} · {self._last_refreshed:%H:%M}"
             status_width = QtGui.QFontMetrics(status_font).horizontalAdvance(status_text)
             status_width = min(status_width, header_rect.width())
             title_width = max(0, header_rect.width() - status_width - max(8, int(round(8 * self._scale))))
