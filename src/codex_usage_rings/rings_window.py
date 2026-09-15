@@ -256,13 +256,23 @@ class UsageRingsWindow(QtWidgets.QWidget):
     def _sync_with_codex(self) -> None:
         state = get_codex_window_state()
         should_show = state.should_show_widget
-        if should_show and (not self.isVisible() or self.isMinimized()):
+        if should_show and (not self._native_window_visible() or self.isMinimized()):
             self.showNormal()
             self._place_initially()
             self._raise_without_focus()
         elif not should_show and self.isVisible():
             self.hide()
         self._codex_state = state
+
+    def _native_window_visible(self) -> bool:
+        """Return the real desktop visibility, including external hide calls."""
+
+        if not self.isVisible():
+            return False
+        if sys.platform != "win32":
+            return True
+        hwnd = int(self.winId())
+        return bool(ctypes.windll.user32.IsWindowVisible(hwnd))
 
     @QtCore.pyqtSlot()
     def refresh(self) -> None:

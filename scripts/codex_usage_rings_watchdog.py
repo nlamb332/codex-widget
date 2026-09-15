@@ -4,20 +4,24 @@
 from __future__ import annotations
 
 import ctypes
+import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WIDGET_SCRIPT = PROJECT_ROOT / "scripts" / "launch_usage_rings.py"
 _SUPERVISOR_MUTEX = "Local\\CodexUsageRingsSupervisor"
+_LOG_FILE = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "CodexUsageRings" / "watchdog.log"
 
 
 def main() -> int:
     mutex = _acquire_supervisor_mutex()
     if mutex == 0:
+        _log("supervisor already running")
         return 0
 
     try:
@@ -32,17 +36,34 @@ def main() -> int:
                     close_fds=True,
                     creationflags=creationflags,
                 )
-            except OSError:
+                _log(f"widget started pid={child.pid}")
+                return_code = child.wait()
+                _log(f"widget exited code={return_code}")
+            except Exception as exc:
                 # Keep supervising if a transient process or filesystem error
-                # prevents one child from starting.
+                # prevents one child from starting. Only exception metadata is
+                # logged; auth tokens and request contents are never written.
+                _log(f"supervisor error {type(exc).__name__}")
                 time.sleep(5)
                 continue
-            child.wait()
             # A normal close or a transient startup failure should not leave
             # the widget unavailable, but avoid a tight respawn loop.
             time.sleep(3)
     finally:
         _release_supervisor_mutex(mutex)
+
+
+def _log(message: str) -> None:
+    """Write minimal lifecycle diagnostics without credentials or payloads."""
+
+    try:
+        _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with _LOG_FILE.open("a", encoding="utf-8") as handle:
+            handle.write(f"{timestamp} {message}\n")
+    except OSError:
+        # Logging must never prevent supervision.
+        pass
 
 
 def _acquire_supervisor_mutex() -> int | None:
