@@ -15,6 +15,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WIDGET_SCRIPT = PROJECT_ROOT / "scripts" / "launch_usage_rings.py"
 _SUPERVISOR_MUTEX = "Local\\CodexUsageRingsSupervisor"
+# Must match USER_QUIT_EXIT_CODE in src/codex_usage_rings/app.py.
+USER_QUIT_EXIT_CODE = 10
 _LOG_FILE = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "CodexUsageRings" / "watchdog.log"
 
 
@@ -46,6 +48,10 @@ def main() -> int:
                 _log(f"supervisor error {type(exc).__name__}")
                 time.sleep(5)
                 continue
+            if return_code == USER_QUIT_EXIT_CODE:
+                # The user quit on purpose; restarting would undo that.
+                _log("widget quit by user; supervisor stopping")
+                return 0
             # A normal close or a transient startup failure should not leave
             # the widget unavailable, but avoid a tight respawn loop.
             time.sleep(3)
