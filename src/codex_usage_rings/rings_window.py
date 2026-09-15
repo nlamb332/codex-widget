@@ -8,7 +8,12 @@ from typing import Optional
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from .host_window import get_codex_window_state
-from .account_usage import CodexUsageError, fetch_usage_with_auth_refresh, parse_usage_payload
+from .account_usage import (
+    CodexNetworkError,
+    CodexUsageError,
+    fetch_usage_with_auth_refresh,
+    parse_usage_payload,
+)
 from .models import UsageCardModel, build_card_models
 from .window_snap import (
     find_connected_peer,
@@ -24,6 +29,13 @@ MAX_SCALE = 1.8
 SCALE_STEP = 0.1
 FULL_CONTENT_MIN_SCALE = round(MIN_SCALE + (2 * SCALE_STEP), 2)
 DEFAULT_SCALE = FULL_CONTENT_MIN_SCALE
+
+# A failing refresh must not keep polling at the healthy cadence; back off up
+# to this ceiling and reset on the first success.
+MAX_REFRESH_BACKOFF_SECONDS = 15 * 60
+# Offline failures never reach the server, so they retry on a short fixed
+# cadence instead of backing off. The rings recover soon after a reconnect.
+OFFLINE_RETRY_SECONDS = 30
 
 
 class UsageRingsWindow(QtWidgets.QWidget):
@@ -101,8 +113,10 @@ class UsageRingsWindow(QtWidgets.QWidget):
         self._quit_shortcut.setContext(QtCore.Qt.ShortcutContext.ApplicationShortcut)
         self._quit_shortcut.activated.connect(self.quit_requested.emit)
 
+        self._base_refresh_seconds = max(15, refresh_seconds)
+        self._consecutive_failures = 0
         self._usage_timer = QtCore.QTimer(self)
-        self._usage_timer.setInterval(max(15, refresh_seconds) * 1000)
+        self._usage_timer.setInterval(self._base_refresh_seconds * 1000)
         self._usage_timer.timeout.connect(self.refresh)
 
         self._lifecycle_timer = QtCore.QTimer(self)
@@ -295,13 +309,38 @@ class UsageRingsWindow(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(object)
     def _handle_usage_loaded(self, cards: tuple[UsageCardModel, UsageCardModel]) -> None:
+        self._consecutive_failures = 0
+        self._apply_refresh_interval(self._base_refresh_seconds)
         self._rings.set_models(cards, last_refreshed=datetime.now().astimezone())
         self.usage_changed.emit(cards)
 
-    @QtCore.pyqtSlot(str)
-    def _handle_usage_failed(self, message: str) -> None:
+    @QtCore.pyqtSlot(str, bool)
+    def _handle_usage_failed(self, message: str, offline: bool) -> None:
+        if offline:
+            # Nothing reached the server, so there is nothing to back off
+            # from. Retry soon so the rings recover right after a reconnect.
+            self._apply_refresh_interval(OFFLINE_RETRY_SECONDS)
+            if self._rings.has_models:
+                # Keep the last good rings on screen while the network is down.
+                self._rings.set_syncing(message)
+                return
+        else:
+            self._consecutive_failures += 1
+            self._back_off()
         self._rings.set_error(message)
         self.usage_changed.emit(None)
+
+    def _back_off(self) -> None:
+        interval = min(
+            self._base_refresh_seconds * (2 ** min(self._consecutive_failures, 8)),
+            MAX_REFRESH_BACKOFF_SECONDS,
+        )
+        self._apply_refresh_interval(interval)
+
+    def _apply_refresh_interval(self, seconds: int) -> None:
+        milliseconds = int(seconds) * 1000
+        if self._usage_timer.interval() != milliseconds:
+            self._usage_timer.setInterval(milliseconds)
 
     def _increase_scale(self) -> None:
         self._change_scale(SCALE_STEP)
@@ -413,6 +452,20 @@ class UsageRingsWindow(QtWidgets.QWidget):
         ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0053)
 
 
+def _status_label(models: object, stale: bool, error: str | None) -> str:
+    """Map the canvas state onto the header badge.
+
+    SYNCING means "last data on screen, refresh retrying". With no data a
+    failure always shows ERROR, so the widget never looks busy when stuck.
+    """
+
+    if error:
+        return "ERROR"
+    if models is None:
+        return "SYNCING"
+    return "SYNCING" if stale else "LIVE"
+
+
 class UsageRingsCanvas(QtWidgets.QWidget):
     """Paint the 5-hour ring around the weekly ring."""
 
@@ -421,6 +474,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         self._scale = 1.0
         self._models: tuple[UsageCardModel, UsageCardModel] | None = None
         self._error: str | None = None
+        self._stale = False
         self._glass_mode = False
         self._last_refreshed: datetime | None = None
         self.setMinimumSize(372, 412)
@@ -445,6 +499,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
     ) -> None:
         self._models = models
         self._error = None
+        self._stale = False
         if last_refreshed is not None:
             self._last_refreshed = last_refreshed
         self.setToolTip(
@@ -455,9 +510,23 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         )
         self.update()
 
+    @property
+    def has_models(self) -> bool:
+        return self._models is not None
+
+    def set_syncing(self, detail: str | None = None) -> None:
+        self._stale = True
+        self._error = None
+        tooltip = "Codex usage could not refresh; showing the last data and retrying"
+        if detail:
+            tooltip = f"{tooltip}\n{detail[:160]}"
+        self.setToolTip(tooltip)
+        self.update()
+
     def set_error(self, message: str) -> None:
         self._models = None
         self._error = message[:80]
+        self._stale = False
         self.setToolTip(f"Codex usage unavailable: {self._error}")
         self.update()
 
@@ -509,7 +578,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
             painter.setFont(title_font)
             painter.setPen(QtGui.QColor("#f5f7fb"))
 
-            status = "LIVE" if self._models is not None else ("ERROR" if self._error else "SYNCING")
+            status = _status_label(self._models, self._stale, self._error)
             status_color = "#46d58b" if status == "LIVE" else ("#ff6b76" if status == "ERROR" else "#b9c4d3")
             status_font = QtGui.QFont("Segoe UI", max(7, int(round(9 * self._scale))))
             status_font.setWeight(QtGui.QFont.Weight.DemiBold)
@@ -691,7 +760,7 @@ class UsageRingsCanvas(QtWidgets.QWidget):
         title_font.setWeight(QtGui.QFont.Weight.DemiBold)
         painter.setFont(title_font)
         painter.setPen(QtGui.QColor("#f5f7fb"))
-        status = "LIVE" if self._models is not None else ("ERROR" if self._error else "SYNCING")
+        status = _status_label(self._models, self._stale, self._error)
         status_color = "#46d58b" if status == "LIVE" else ("#ff6b76" if status == "ERROR" else "#b9c4d3")
         status_font = QtGui.QFont("Segoe UI", max(7, int(round(9 * self._scale))))
         status_font.setWeight(QtGui.QFont.Weight.DemiBold)
@@ -814,7 +883,8 @@ def _ring_color(remaining: int) -> QtGui.QColor:
 
 class UsageFetchWorker(QtCore.QObject):
     loaded = QtCore.pyqtSignal(object)
-    failed = QtCore.pyqtSignal(str)
+    # The flag marks failures where no connection was made (offline).
+    failed = QtCore.pyqtSignal(str, bool)
     finished = QtCore.pyqtSignal()
 
     def __init__(self, *, auth_file, base_url: str) -> None:
@@ -828,7 +898,13 @@ class UsageFetchWorker(QtCore.QObject):
             payload = fetch_usage_with_auth_refresh(self._auth_file, self._base_url, timeout=20.0)
             usage = parse_usage_payload(payload)
             self.loaded.emit(build_card_models(five_hour=usage.five_hour, weekly=usage.weekly))
+        except CodexNetworkError as exc:
+            self.failed.emit(str(exc), True)
         except CodexUsageError as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit(str(exc), False)
+        except Exception as exc:  # noqa: BLE001 - a silent worker is the worse failure
+            # Anything else used to escape the slot without emitting a result,
+            # leaving the widget on its last state with no error shown.
+            self.failed.emit(f"{type(exc).__name__}: {exc}", False)
         finally:
             self.finished.emit()

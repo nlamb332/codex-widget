@@ -128,8 +128,7 @@ The app reads the local authentication file used by Codex:
 ~/.codex/auth.json
 ```
 
-It extracts the access token, account ID, and refresh token as needed, then
-requests usage from:
+It extracts the access token and account ID, then requests usage from:
 
 ```http
 GET https://chatgpt.com/backend-api/wham/usage
@@ -140,6 +139,19 @@ Accept: application/json
 
 The endpoint may change without notice. Credentials stay local and are sent
 only with that usage request.
+
+The widget only reads `auth.json`; it never renews or rewrites it. The Codex
+app holds the same refresh token and OpenAI rotates it on every renewal, so a
+renewal by the widget could sign Codex out. When a usage request is rejected,
+the widget instead asks Codex's own app server for the account with a token
+refresh (`codex app-server`, `account/read` with `refreshToken: true`), which
+makes no model call, then reads the file again. It asks at most once every 10
+minutes. The CLI is found on `PATH`, in the Codex app's install folder, or at
+`CODEX_USAGE_CLI`.
+
+Losing the network is not treated as a sign-in problem: offline refreshes
+retry every 30 seconds and keep the last rings on screen. Other failures back
+off from the normal interval up to 15 minutes and reset on the first success.
 
 ## Privacy and repository hygiene
 
