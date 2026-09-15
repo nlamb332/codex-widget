@@ -21,6 +21,7 @@ Clone the public repository, create an isolated Python environment, and
 install the widget:
 
 ```powershell
+# Replace your-account with the GitHub owner of this repository.
 git clone https://github.com/your-account/codex-widget.git
 cd codex-widget
 python -m venv .venv
@@ -32,6 +33,12 @@ If `python` is not available, replace it with `py -3.11` (or another
 installed Python 3.10+ version). Sign in to the Codex desktop app before
 launching. The widget reads the local Codex credential at
 `%USERPROFILE%\.codex\auth.json`; never copy that file into this repository.
+
+Confirm that the credentials file exists before starting the widget:
+
+```powershell
+Test-Path "$env:USERPROFILE\.codex\auth.json"
+```
 
 To verify the installation immediately:
 
@@ -77,9 +84,10 @@ Optional arguments:
 
 - Drag the rings window with the left mouse button. Its position is saved and
   restored when it reappears.
-- The Codex and Claude widgets snap together when the dragged widget comes
-  within 20 pixels of another widget and overlaps it by at least 75% along
-  the alignment axis. Left/right placements align their top or bottom edges;
+- The Codex and Claude widgets move freely during a drag. On mouse release,
+  they snap together only when the final position is within 20 pixels and
+  overlaps at least 75% along the alignment axis. The visible card borders
+  touch when snapped. Left/right placements align their top or bottom edges;
   top/bottom placements align their left or right edges. Once snapped,
   dragging either card moves the connected pair together. Press `Ctrl+S` while
   a widget is focused to separate the pair.
