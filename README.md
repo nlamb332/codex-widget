@@ -30,8 +30,9 @@ python -m venv .venv
 ```
 
 If `python` is not available, replace it with `py -3.11` (or another
-installed Python 3.10+ version). Sign in to the Codex desktop app before
-launching. The widget reads the local Codex credential at
+installed Python 3.10+ version). Install the official ChatGPT desktop app,
+which includes Codex, from the [ChatGPT download page](https://chatgpt.com/download/),
+open Codex, and sign in before launching. The widget reads the local Codex credential at
 `%USERPROFILE%\.codex\auth.json`; never copy that file into this repository.
 
 Confirm that the credentials file exists before starting the widget:
